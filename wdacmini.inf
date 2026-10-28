@@ -20,7 +20,7 @@ wdacmini.sys=1
 CopyFiles=@wdacmini.sys
 
 [DefaultInstall.NTamd64.Services]
-AddService=wdacmini,0x00000002,WdacMiniService
+AddService=wdacmini,0x00000002,WdacMiniService,WdacMiniInstances
 
 [WdacMiniService]
 DisplayName=%ServiceName%
@@ -28,6 +28,14 @@ ServiceType=1
 StartType=3
 ErrorControl=1
 ServiceBinary=%12%\wdacmini.sys
+
+[WdacMiniInstances]
+AddReg=WdacMiniInstanceRegistry
+
+[WdacMiniInstanceRegistry]
+HKR,"Instances","DefaultInstance",0x00000000,"wdacmini"
+HKR,"Instances\wdacmini","Altitude",0x00000000,"370031"
+HKR,"Instances\wdacmini","Flags",0x00010001,0x00000000
 
 [Strings]
 ProviderName="wdac-kernel"

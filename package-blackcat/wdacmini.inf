@@ -1,0 +1,43 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+DriverVer = 10/27/2026,21.38.59.456
+CatalogFile=wdacmini.cat
+PnpLockdown=1
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+wdacmini.sys=1
+
+[DefaultInstall.NTamd64]
+CopyFiles=@wdacmini.sys
+
+[DefaultInstall.NTamd64.Services]
+AddService=wdacmini,0x00000002,WdacMiniService,WdacMiniInstances
+
+[WdacMiniService]
+DisplayName=%ServiceName%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\wdacmini.sys
+
+[WdacMiniInstances]
+AddReg=WdacMiniInstanceRegistry
+
+[WdacMiniInstanceRegistry]
+HKR,"Instances","DefaultInstance",0x00000000,"wdacmini"
+HKR,"Instances\wdacmini","Altitude",0x00000000,"370031"
+HKR,"Instances\wdacmini","Flags",0x00010001,0x00000000
+
+[Strings]
+ProviderName="wdac-kernel"
+ServiceName="WDAC Mini"
+DiskName="WDAC Mini Installation Disk"

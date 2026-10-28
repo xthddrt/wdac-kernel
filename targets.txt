@@ -1,1 +1,7 @@
 %WINDIR%\System32\notepad.exe
+C:\Nexon\Library\maplestorycw\appdata\grap\BlackCat64.sys
+
+# Optional component tests; enable one at a time after the BlackCat comparison.
+# C:\Nexon\Library\maplestorycw\appdata\grap\grap-communicator64.aes
+# C:\Nexon\Library\maplestorycw\appdata\grap\grap-core64.aes
+# C:\Nexon\Library\maplestorycw\appdata\grap64.dll

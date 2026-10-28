@@ -1,4 +1,5 @@
 #include <ntifs.h>
+#include <fltKernel.h>
 #include <bcrypt.h>
 #include "blocked_images.h"
 
@@ -320,24 +321,32 @@ static BOOLEAN WdacMiniShouldBlock(_In_ HANDLE FileHandle)
     return FALSE;
 }
 
-static VOID NTAPI WdacMiniProcessNotify(
-    _Inout_ PEPROCESS Process,
-    _In_ HANDLE ProcessId,
-    _Inout_opt_ PPS_CREATE_NOTIFY_INFO CreateInfo)
+static PFLT_FILTER gWdacMiniFilter;
+
+static FLT_PREOP_CALLBACK_STATUS FLTAPI WdacMiniPreAcquireForSection(
+    _Inout_ PFLT_CALLBACK_DATA Data,
+    _In_ PCFLT_RELATED_OBJECTS FltObjects,
+    _Flt_CompletionContext_Outptr_ PVOID *CompletionContext)
 {
     HANDLE fileHandle;
     NTSTATUS status;
+    BOOLEAN block;
+    ULONG executableProtection = PAGE_EXECUTE | PAGE_EXECUTE_READ |
+        PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
 
-    UNREFERENCED_PARAMETER(Process);
-    UNREFERENCED_PARAMETER(ProcessId);
+    UNREFERENCED_PARAMETER(FltObjects);
+    UNREFERENCED_PARAMETER(CompletionContext);
 
-    if (CreateInfo == NULL || CreateInfo->FileObject == NULL)
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
+        Data->Iopb->TargetFileObject == NULL ||
+        (Data->Iopb->Parameters.AcquireForSectionSynchronization.PageProtection &
+            executableProtection) == 0)
     {
-        return;
+        return FLT_PREOP_SUCCESS_NO_CALLBACK;
     }
 
     status = ObOpenObjectByPointer(
-        CreateInfo->FileObject,
+        Data->Iopb->TargetFileObject,
         OBJ_KERNEL_HANDLE,
         NULL,
         FILE_READ_DATA | FILE_READ_ATTRIBUTES,
@@ -346,22 +355,65 @@ static VOID NTAPI WdacMiniProcessNotify(
         &fileHandle);
     if (!NT_SUCCESS(status))
     {
-        return;
+        return FLT_PREOP_SUCCESS_NO_CALLBACK;
     }
 
-    if (WdacMiniShouldBlock(fileHandle))
-    {
-        CreateInfo->CreationStatus = STATUS_ACCESS_DENIED;
-    }
-
+    block = WdacMiniShouldBlock(fileHandle);
     (VOID)ZwClose(fileHandle);
+    if (!block)
+    {
+        return FLT_PREOP_SUCCESS_NO_CALLBACK;
+    }
+
+    Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+    Data->IoStatus.Information = 0;
+    return FLT_PREOP_COMPLETE;
+}
+
+static NTSTATUS FLTAPI WdacMiniFilterUnload(_In_ FLT_FILTER_UNLOAD_FLAGS Flags)
+{
+    UNREFERENCED_PARAMETER(Flags);
+    return STATUS_SUCCESS;
 }
 
 static VOID NTAPI WdacMiniUnload(_In_ PDRIVER_OBJECT DriverObject)
 {
     UNREFERENCED_PARAMETER(DriverObject);
-    (VOID)PsSetCreateProcessNotifyRoutineEx(WdacMiniProcessNotify, TRUE);
+    if (gWdacMiniFilter != NULL)
+    {
+        FltUnregisterFilter(gWdacMiniFilter);
+        gWdacMiniFilter = NULL;
+    }
 }
+
+static const FLT_OPERATION_REGISTRATION gWdacMiniOperations[] = {
+    {
+        IRP_MJ_ACQUIRE_FOR_SECTION_SYNCHRONIZATION,
+        0,
+        WdacMiniPreAcquireForSection,
+        NULL,
+        NULL
+    },
+    { IRP_MJ_OPERATION_END, 0, NULL, NULL, NULL }
+};
+
+static const FLT_REGISTRATION gWdacMiniRegistration = {
+    sizeof(FLT_REGISTRATION),
+    FLT_REGISTRATION_VERSION,
+    0,
+    NULL,
+    gWdacMiniOperations,
+    WdacMiniFilterUnload,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
 
 NTSTATUS NTAPI DriverEntry(
     _In_ PDRIVER_OBJECT DriverObject,
@@ -371,9 +423,20 @@ NTSTATUS NTAPI DriverEntry(
 
     UNREFERENCED_PARAMETER(RegistryPath);
 
-    status = PsSetCreateProcessNotifyRoutineEx(WdacMiniProcessNotify, FALSE);
+    status = FltRegisterFilter(
+        DriverObject,
+        &gWdacMiniRegistration,
+        &gWdacMiniFilter);
     if (!NT_SUCCESS(status))
     {
+        return status;
+    }
+
+    status = FltStartFiltering(gWdacMiniFilter);
+    if (!NT_SUCCESS(status))
+    {
+        FltUnregisterFilter(gWdacMiniFilter);
+        gWdacMiniFilter = NULL;
         return status;
     }
 

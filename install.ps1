@@ -90,5 +90,5 @@ if (-not (Get-CimInstance Win32_SystemDriver -Filter "Name='wdacmini'" -ErrorAct
 
 Invoke-Native 'sc.exe' @('start', 'wdacmini')
 Assert-NotepadBlocked
-Write-Host 'WDAC Mini is installed and running. notepad.exe is blocked.'
+Write-Host 'WDAC Mini is installed and running. The Notepad image-load smoke test passed.'
 Write-Host "Certificate thumbprint: $($certificate.Thumbprint)"

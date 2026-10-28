@@ -54,15 +54,16 @@ foreach ($targetLine in [System.IO.File]::ReadAllLines((Join-Path $PSScriptRoot 
 
     $item = Get-Item -LiteralPath $target -ErrorAction Stop
     $files = if ($item.PSIsContainer) {
-        @(Get-ChildItem -LiteralPath $item.FullName -Filter '*.exe' -File -Recurse -ErrorAction Stop)
+        @(Get-ChildItem -LiteralPath $item.FullName -File -Recurse -ErrorAction Stop |
+            Where-Object { $_.Extension -in '.exe', '.sys', '.dll', '.aes' })
     }
     else {
         @($item)
     }
 
     foreach ($file in $files) {
-        if ($file.Extension -ine '.exe') {
-            throw "Target is not an executable: $($file.FullName)"
+        if ($file.Extension -notin '.exe', '.sys', '.dll', '.aes') {
+            throw "Target is not a supported image type (.exe, .sys, .dll, .aes): $($file.FullName)"
         }
 
         $hash = Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256
@@ -81,7 +82,7 @@ foreach ($targetLine in [System.IO.File]::ReadAllLines((Join-Path $PSScriptRoot 
 }
 
 if ($entries.Count -eq 0) {
-    throw 'No executable targets were found.'
+    throw 'No image targets were found.'
 }
 
 $header = New-Object System.Text.StringBuilder
